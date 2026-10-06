@@ -16,9 +16,20 @@ smol = st.Page("app_pages/tokenization_smollm2.py", title="Inside SmolLM2's", ic
 compare = st.Page(
     "app_pages/tokenization_compare.py", title="Compare them", icon=":material/compare_arrows:"
 )
-st.session_state.pages = {"own": own, "smol": smol, "compare": compare}
+pretraining = st.Page(
+    "app_pages/pretraining.py", title="Watch it learn", icon=":material/model_training:"
+)
+st.session_state.pages = {
+    "own": own,
+    "smol": smol,
+    "compare": compare,
+    "pretraining": pretraining,
+}
 
-page = st.navigation({"": [home], "1 · Tokenization": [own, smol, compare]}, position="sidebar")
+page = st.navigation(
+    {"": [home], "1 · Tokenization": [own, smol, compare], "2 · Pretraining": [pretraining]},
+    position="sidebar",
+)
 
 RANDOM = "Random validation paragraph"
 

@@ -29,7 +29,12 @@ STAGES = [
         "title": "2 · Tiny GPT from scratch",
         "status": ("In progress", "orange", ":material/construction:"),
         "blurb": "Attention, blocks and a training loop on our 8k-token corpus.",
-        "questions": ["What does the loss curve say?", "What do attention heads look at?"],
+        "questions": [
+            "When does validation loss stop following training loss?",
+            "How does the generated text change from step 0 to the end?",
+            "What do the attention heads look at?",
+        ],
+        "links": [("pretraining", "Watch it learn", ":material/model_training:")],
     },
     {
         "title": "3 · Decoding",

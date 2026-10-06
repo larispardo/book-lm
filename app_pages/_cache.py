@@ -60,3 +60,36 @@ def word_counts() -> dict[str, int]:
 @st.cache_data(show_spinner=False)
 def frequency_words() -> list[tuple[str, int]]:
     return lab.words_by_frequency(word_counts())
+
+
+# ── pretraining ──────────────────────────────────────────────────────────────────────────
+
+
+def _run_dir(name: str):
+    from booklm.pretrain_lab import MODELS
+
+    return MODELS / name
+
+
+def run_log(name: str):
+    """Logs grow while a run trains, so the cache key includes the file's mtime."""
+    return _run_log(name, (_run_dir(name) / "log.jsonl").stat().st_mtime)
+
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def _run_log(name: str, mtime: float):
+    from booklm import pretrain_lab
+
+    return pretrain_lab.load_run(_run_dir(name))
+
+
+def gpt_model(name: str):
+    """Reload when a run saves a better checkpoint (mtime changes)."""
+    return _gpt_model(name, (_run_dir(name) / "model.pt").stat().st_mtime)
+
+
+@st.cache_resource(show_spinner="Loading checkpoint…", max_entries=4)
+def _gpt_model(name: str, mtime: float):
+    from booklm import pretrain_lab
+
+    return pretrain_lab.load_model(_run_dir(name))
