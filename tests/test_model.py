@@ -37,7 +37,6 @@ def test_lr_schedule_warms_up_then_decays_to_ten_percent():
 # ── exercise 1: causal_attention ────────────────────────────────────────────────────────
 
 
-@EXERCISE
 def test_attention_matches_pytorch():
     torch.manual_seed(0)
     q, k, v = (torch.randn(2, 4, 8, 16) for _ in range(3))
@@ -45,7 +44,6 @@ def test_attention_matches_pytorch():
     assert torch.allclose(out, F.scaled_dot_product_attention(q, k, v, is_causal=True), atol=1e-5)
 
 
-@EXERCISE
 def test_attention_weights_are_causal_and_normalised():
     q, k, v = (torch.randn(1, 2, 5, 8) for _ in range(3))
     _, w = causal_attention(q, k, v)
@@ -55,7 +53,6 @@ def test_attention_weights_are_causal_and_normalised():
     assert torch.all(w[..., 0, 0] == 1)  # the first token can only look at itself
 
 
-@EXERCISE
 def test_future_tokens_cannot_change_the_past():
     model = GPT(TINY).eval()
     a = torch.tensor([[1, 2, 3, 4, 5]])
@@ -66,7 +63,6 @@ def test_future_tokens_cannot_change_the_past():
 # ── exercise 2: train_step ──────────────────────────────────────────────────────────────
 
 
-@EXERCISE
 def test_train_step_overfits_one_batch():
     torch.manual_seed(0)
     model = GPT(TINY)

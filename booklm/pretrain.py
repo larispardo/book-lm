@@ -49,7 +49,23 @@ def train_step(
     4. clip the gradient norm to `grad_clip` (torch.nn.utils.clip_grad_norm_)
     5. let the optimizer update the weights
     """
-    raise NotImplementedError
+    # Step 1: forward pass
+    logits = model(x)  # (B, T, vocab)
+
+    # Step 2: compute loss
+    loss = F.cross_entropy(logits.view(-1, logits.size(-1)), y.view(-1))
+
+    # Step 3: clear old gradients and backpropagate the loss
+    optimizer.zero_grad()
+    loss.backward()
+
+    # Step 4: clip the gradient norm
+    torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+
+    # Step 5: update the weights
+    optimizer.step()
+
+    return loss.item()
 
 
 # ── provided ───────────────────────────────────────────────────────────────────────────

@@ -58,7 +58,23 @@ def causal_attention(
     tensor.masked_fill(mask, float("-inf")), torch.softmax(x, dim=-1).
     The weights are returned too, so the lab can draw attention maps.
     """
-    raise NotImplementedError
+    B, H, T, Dh = q.shape
+    # Step 1: compute scores
+    scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(Dh)  # (B, H, T, T)
+
+    # Step 2: apply causal mask
+    mask = torch.triu(
+        torch.ones(T, T, dtype=torch.bool, device=scores.device), diagonal=1
+    )  # (T, T)
+    scores = scores.masked_fill(mask, float("-inf"))  # (B, H, T, T)
+
+    # Step 3: compute weights
+    weights = torch.softmax(scores, dim=-1)  # (B, H, T, T)
+
+    # Step 4: compute output
+    output = torch.matmul(weights, v)  # (B, H, T, Dh)
+
+    return output, weights
 
 
 # ── building blocks (provided) ─────────────────────────────────────────────────────────
