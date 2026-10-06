@@ -10,6 +10,7 @@ dependencies = ["tokenizers>=0.20"]
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.7"]
 lab = ["streamlit>=1.57", "watchdog>=4"]
+train = ["torch>=2.4", "numpy>=1.26"]
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -27,7 +27,7 @@ STAGES = [
     },
     {
         "title": "2 · Tiny GPT from scratch",
-        "status": ("Next", "blue", ":material/schedule:"),
+        "status": ("In progress", "orange", ":material/construction:"),
         "blurb": "Attention, blocks and a training loop on our 8k-token corpus.",
         "questions": ["What does the loss curve say?", "What do attention heads look at?"],
     },
