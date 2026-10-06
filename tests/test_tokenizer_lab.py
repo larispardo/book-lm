@@ -59,3 +59,13 @@ def test_merge_tree(bpe):
 
     assert leaves(tree) == [" ", "t", "h", "e"]
     assert lab.merge_tree(bpe, 65) == {"id": 65, "token": "A", "children": []}
+
+
+def test_smaller_vocab_is_a_prefix_of_a_bigger_one():
+    """BPE is greedy and deterministic: train once, cut anywhere."""
+    assert train_bpe(TEXT, 10) == train_bpe(TEXT, 30)[:10]
+
+
+def test_random_paragraph_respects_length_bounds():
+    text = "\n\n".join(["short", "x" * 200, "y" * 900])
+    assert lab.random_paragraph(text) == "x" * 200

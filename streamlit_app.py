@@ -1,5 +1,7 @@
 import streamlit as st
 
+from app_pages._cache import split
+from booklm import tokenizer_lab as lab
 from booklm.tokenizer_lab import ARTIFACTS
 
 st.set_page_config(page_title="book-lm lab", page_icon=":material/menu_book:", layout="wide")
@@ -20,13 +22,24 @@ page = st.navigation(
     position="top",
 )
 
+RANDOM = "Random validation paragraph"
+
+
+def apply_preset() -> None:
+    if st.session_state.preset == RANDOM:
+        st.session_state.sentence = lab.random_paragraph(split("val"))
+    else:
+        st.session_state.sentence = lab.SAMPLES[st.session_state.preset]
+
+
+if "sentence" not in st.session_state:
+    st.session_state.sentence = next(iter(lab.SAMPLES.values()))
+
 with st.sidebar:
-    st.text_area(
-        "Sample sentence",
-        value='Holmes looked at me and said, "Elementary, my dear Watson."',
-        key="sentence",
-        help="Shared by every panel.",
-    )
+    st.selectbox("Sample text", [*lab.SAMPLES, RANDOM], key="preset", on_change=apply_preset)
+    if st.session_state.preset == RANDOM:
+        st.button("Another paragraph", icon=":material/casino:", on_click=apply_preset)
+    st.text_area("Edit freely", key="sentence", height=140, help="Shared by every panel.")
 
 if page.title != "Roadmap" and not (ARTIFACTS / "data" / "clean" / "train.txt").exists():
     st.error(

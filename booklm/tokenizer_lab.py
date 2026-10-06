@@ -15,9 +15,36 @@ ARTIFACTS = Path("artifacts")
 D_MODEL = 384
 SMOLLM2_ID = "HuggingFaceTB/SmolLM2-135M"
 
+# Sample texts chosen to stress tokenizers differently.
+SAMPLES = {
+    "Classic quote": 'Holmes looked at me and said, "Elementary, my dear Watson."',
+    "Rare Victorian words": (
+        "The commissionnaire handed me a telegram from Northumberland, marked most "
+        "confidential, concerning the disappearance of the ambassador's correspondence."
+    ),
+    "Names and numbers": (
+        "Inspector Lestrade met Mycroft and Irene Adler at 221B Baker Street at "
+        "half-past nine on the 4th of March, 1881."
+    ),
+    "Modern English": (
+        "I deployed the Kubernetes cluster from my smartphone while streaming a podcast "
+        "about cryptocurrency."
+    ),
+    "Spanish": "Holmes miró por la ventana y dijo que el asesino seguía en la ciudad.",
+    "Code": "def solve(case):\n    return min(case.suspects, key=lambda s: s.alibi)",
+}
+
 
 def load_split(split: str, artifacts: Path = ARTIFACTS) -> str:
     return (artifacts / "data" / "clean" / f"{split}.txt").read_text(encoding="utf-8")
+
+
+def random_paragraph(text: str, min_chars: int = 120, max_chars: int = 500) -> str:
+    """A random mid-length paragraph, e.g. from the validation split."""
+    import random
+
+    paragraphs = [p for p in text.split("\n\n") if min_chars <= len(p) <= max_chars]
+    return random.choice(paragraphs)
 
 
 def load_meta(name: str, artifacts: Path = ARTIFACTS) -> dict:

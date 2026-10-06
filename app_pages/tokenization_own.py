@@ -2,10 +2,19 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from app_pages._cache import DEFAULT_VOCAB, candidates, stats, tokenizer, training_run
+from app_pages._cache import (
+    DEFAULT_VOCAB,
+    SPECIALS,
+    candidates,
+    full_run,
+    max_vocab,
+    stats,
+    tokenizer,
+)
 from booklm import tokenizer_lab as lab
 
 sentence = st.session_state.sentence
+BUDGETS = {"4k": 4096, "8k": 8192, "16k": 16384}
 
 view = st.segmented_control(
     "View",
@@ -21,24 +30,35 @@ view = st.segmented_control(
 
 # ── step by step ─────────────────────────────────────────────────────────────────────────
 if view and "Step by step" in view:
+    run = full_run()
+    bpe = tokenizer(max_vocab())  # ids are the same in every prefix, so one decoder fits all
+    total = len(run.merges)
     st.caption(
         "BPE starts from the 256 possible bytes and greedily merges the most frequent "
-        "adjacent pair in the training text, one pair per step. Slide through the merges "
-        "and watch the sentence compress."
+        f"adjacent pair in the training text, one pair per step. On this corpus it can merge "
+        f"{total:,} times before no pair occurs twice. Choosing a vocabulary size just means "
+        "stopping early: the 8k tokenizer is exactly the first 7,935 merges."
     )
-    run = training_run(DEFAULT_VOCAB)
-    bpe = tokenizer(DEFAULT_VOCAB)
-    total = len(run.merges)
     stops = sorted(
         {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 15, 20, 30, 50, 75, 100, 150, 200, 300, 500}
-        | {750, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, total}
+        | {750, 1000, 1500, 2000, 3000, 5000, 10000, 15000, total}
+        | {size - 256 - SPECIALS for size in BUDGETS.values()}
     )
-    step = st.select_slider("Merges applied", stops, value=20, key="own_step")
+    step = st.select_slider(
+        "Merges applied",
+        stops,
+        value=20,
+        key="own_step",
+        format_func=lambda s: next(
+            (f"{s:,} ({name} budget)" for name, v in BUDGETS.items() if s == v - 256 - SPECIALS),
+            f"{s:,}",
+        ),
+    )
 
     tokens = lab.tokens_at_step(run.merges, step, sentence)
     with st.container(horizontal=True):
-        st.metric("Vocabulary so far", f"{256 + step:,}", border=True)
-        st.metric("Tokens in sentence", len(tokens), border=True)
+        st.metric("Vocabulary so far", f"{256 + step + SPECIALS:,}", border=True)
+        st.metric("Tokens in sample", len(tokens), border=True)
         n_bytes = len(sentence.encode("utf-8"))
         st.metric("Bytes per token", f"{n_bytes / max(1, len(tokens)):.2f}", border=True)
     st.markdown(lab.chips_markdown([t for _, t in tokens]))
@@ -46,7 +66,7 @@ if view and "Step by step" in view:
     if step:
         left, right = (bpe.decode([i]) for i in run.merges[step - 1])
         st.info(
-            f"Merge #{step} created id **{255 + step}**: `{lab.visible(left)}` + "
+            f"Merge #{step:,} created id **{255 + step}**: `{lab.visible(left)}` + "
             f"`{lab.visible(right)}` → `{lab.visible(left + right)}`. It was chosen because "
             f"that pair occurred **{run.counts[step - 1]:,}** times at that moment, more than "
             "any other pair.",
@@ -57,7 +77,7 @@ if view and "Step by step" in view:
     with left_col:
         st.subheader("How often the chosen pair occurred", divider="gray")
         curve = pd.DataFrame({"merge": range(1, total + 1), "count": run.counts})
-        chart = (
+        line = (
             alt.Chart(curve)
             .mark_line()
             .encode(
@@ -65,14 +85,31 @@ if view and "Step by step" in view:
                 y=alt.Y("count", scale=alt.Scale(type="log"), title="occurrences (log)"),
             )
         )
-        rule = alt.Chart(pd.DataFrame({"merge": [max(step, 1)]})).mark_rule(color="red")
+        budgets = pd.DataFrame(
+            {"merge": [v - 256 - SPECIALS for v in BUDGETS.values()], "budget": list(BUDGETS)}
+        )
+        budget_rules = (
+            alt.Chart(budgets)
+            .mark_rule(strokeDash=[4, 4], color="gray")
+            .encode(x="merge", tooltip=["budget"])
+        )
+        budget_labels = (
+            alt.Chart(budgets)
+            .mark_text(align="left", dx=3, dy=-4, color="gray")
+            .encode(x="merge", y=alt.value(8), text="budget")
+        )
+        here = (
+            alt.Chart(pd.DataFrame({"merge": [max(step, 1)]}))
+            .mark_rule(color="red")
+            .encode(x="merge")
+        )
         st.altair_chart(
-            chart + rule.encode(x="merge"),
-            alt="Frequency of each chosen pair, falling steeply as merges progress",
+            line + budget_rules + budget_labels + here,
+            alt="Frequency of each chosen pair, falling steeply; dashed lines mark vocab budgets",
         )
         st.caption(
-            "Early merges glue very common pairs (spaces + letters); late merges promote "
-            "words seen a few dozen times. Training stops at the vocabulary budget."
+            "Early merges glue very common pairs (space + letter). By the 8k budget a merge is "
+            "worth only a few dozen occurrences; at the end, pairs seen just twice."
         )
     with right_col:
         st.subheader("What the next step chose from", divider="gray")
@@ -92,7 +129,7 @@ if view and "Step by step" in view:
                 alt="Top candidate pairs and their counts at the next merge",
             )
         else:
-            st.caption("Vocabulary budget reached: no more merges.")
+            st.caption("No pair occurs twice any more: training is over.")
 
     st.subheader("Latest merges", divider="gray")
     recent = range(max(0, step - 12), step)
@@ -112,76 +149,95 @@ if view and "Step by step" in view:
 
 # ── vocabulary size ──────────────────────────────────────────────────────────────────────
 elif view and "Vocabulary size" in view:
+    biggest = max_vocab()
     st.caption(
-        "Same algorithm, different budgets. A bigger vocabulary means longer tokens and "
-        "shorter sequences, but a bigger embedding table and rarer tokens to learn."
+        "Same training run, cut at different points. Bigger vocabularies mean longer tokens "
+        "and shorter sequences, but a bigger embedding table and rarer tokens to learn. "
+        f"This corpus caps out at {biggest:,}: after that no pair occurs twice."
     )
+    options = [512, 1024, 2048, 4096, 8192, 16384, biggest]
+
+    def size_label(v: int) -> str:
+        return f"max ({v / 1024:.1f}k)" if v == biggest else f"{v / 1024:g}k"
+
     sizes = st.pills(
         "Vocabulary sizes",
-        [1024, 2048, 4096, 8192, 16384, 32768],
+        options,
         selection_mode="multi",
-        default=[4096, 8192, 16384],
-        format_func=lambda v: f"{v // 1024}k",
+        default=[1024, 4096, 8192, 16384, biggest],
+        format_func=size_label,
         key="own_sizes",
     )
     if not sizes:
         st.stop()
+    sizes = sorted(sizes)
+
     rows = []
-    for size in sorted(sizes):
+    for size in sizes:
         s = stats(size)
         rows.append(
             {
-                "vocab": f"{size // 1024}k",
-                "merges learned": s.merges_learned,
+                "vocab": size_label(size),
+                "vocab size": s.vocab_size,
                 "train bytes/token": s.train_bytes_per_token,
                 "val bytes/token": s.val_bytes_per_token,
                 "val gap %": s.generalization_gap,
-                f"embedding params (d={lab.D_MODEL})": s.embedding_params,
+                "tokens in sample": len(tokenizer(size).encode(sentence)),
+                "embedding params": s.embedding_params,
             }
         )
     table = pd.DataFrame(rows)
-    st.dataframe(
-        table,
-        hide_index=True,
-        column_config={
-            "train bytes/token": st.column_config.NumberColumn(format="%.2f"),
-            "val bytes/token": st.column_config.NumberColumn(format="%.2f"),
-            "val gap %": st.column_config.NumberColumn(format="%.1f"),
-            f"embedding params (d={lab.D_MODEL})": st.column_config.NumberColumn(format="compact"),
-        },
-        alt="Compression and cost for each vocabulary size",
+
+    metric = st.segmented_control(
+        "Plot",
+        ["Bytes per token", "Val gap %", "Tokens in sample", "Embedding params"],
+        default="Bytes per token",
+        key="own_metric",
     )
+    columns = {
+        "Bytes per token": ["train bytes/token", "val bytes/token"],
+        "Val gap %": ["val gap %"],
+        "Tokens in sample": ["tokens in sample"],
+        "Embedding params": ["embedding params"],
+    }[metric or "Bytes per token"]
     long = table.melt(
-        id_vars="vocab",
-        value_vars=["train bytes/token", "val bytes/token"],
-        var_name="split",
-        value_name="bytes per token",
+        id_vars=["vocab", "vocab size"], value_vars=columns, var_name="series", value_name="value"
     )
     st.altair_chart(
         alt.Chart(long)
         .mark_line(point=True)
         .encode(
-            x=alt.X("vocab", sort=None),
-            y=alt.Y("bytes per token", scale=alt.Scale(zero=False)),
-            color="split",
-        ),
-        alt="Bytes per token rises with vocabulary size, with diminishing returns",
+            x=alt.X("vocab size", scale=alt.Scale(type="log", base=2), title="vocabulary size"),
+            y=alt.Y("value", scale=alt.Scale(zero=False), title=metric),
+            color=alt.Color("series", legend=alt.Legend(orient="bottom", title=None)),
+            tooltip=["vocab", "series", alt.Tooltip("value", format=",.2f")],
+        )
+        .properties(height=280),
+        alt=f"{metric} for each selected vocabulary size",
     )
-    st.caption(
-        "Compression gains shrink as the vocabulary grows, while the train/val gap widens: "
-        "big vocabularies start memorising words that only appear in the training text."
+    st.dataframe(
+        table.drop(columns="vocab size"),
+        hide_index=True,
+        column_config={
+            "train bytes/token": st.column_config.NumberColumn(format="%.2f"),
+            "val bytes/token": st.column_config.NumberColumn(format="%.2f"),
+            "val gap %": st.column_config.NumberColumn(format="%.1f"),
+            "embedding params": st.column_config.NumberColumn(
+                f"embedding params (d={lab.D_MODEL})", format="compact"
+            ),
+        },
+        alt="Compression and cost for each vocabulary size",
     )
 
-    st.subheader("The sample sentence at each size", divider="gray")
-    for size in sorted(sizes):
+    st.subheader("The sample at each size", divider="gray")
+    for size in sizes:
         pieces = lab.pieces(tokenizer(size), sentence)
-        st.markdown(f"**{size // 1024}k** · {len(pieces)} tokens")
+        st.markdown(f"**{size_label(size)}** · {len(pieces)} tokens")
         st.markdown(lab.chips_markdown([t for _, t in pieces]))
 
 # ── vocab browser (exercise) ─────────────────────────────────────────────────────────────
 elif view and "Vocab browser" in view:
     bpe = tokenizer(DEFAULT_VOCAB)
-    query = st.text_input("Find tokens containing", value="olmes", key="browser_query")
     try:
         tree = lab.merge_tree(bpe, bpe.encode(" Holmes")[0])
     except NotImplementedError:
