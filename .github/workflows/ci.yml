@@ -1,0 +1,26 @@
+# Runs when book-lm is the repository root. Tests use a tiny random model, so no training is needed.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv venv -p 3.11 .venv
+      - run: uv pip install -p .venv/bin/python torch --index-url https://download.pytorch.org/whl/cpu
+      - run: uv pip install -p .venv/bin/python -e ".[dev]"
+      - run: .venv/bin/ruff check booklm tests
+      - run: .venv/bin/python -m pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t booklm:ci .

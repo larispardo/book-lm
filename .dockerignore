@@ -1,0 +1,8 @@
+.venv
+artifacts
+video
+media
+tests
+.github
+**/__pycache__
+*.egg-info

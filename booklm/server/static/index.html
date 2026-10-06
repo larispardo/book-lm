@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>BookLM · glass-box explorer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">◧</span>
+      <div>
+        <h1>BookLM <span class="brand-sub">glass-box explorer</span></h1>
+        <p class="tagline">Watch three Sherlock Holmes language models think, one token at a time.</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button role="tab" id="tab-explore" aria-controls="panel-explore" aria-selected="true">Explore</button>
+      <button role="tab" id="tab-compare" aria-controls="panel-compare" aria-selected="false" tabindex="-1">Compare</button>
+      <button role="tab" id="tab-models" aria-controls="panel-models" aria-selected="false" tabindex="-1">Models</button>
+    </nav>
+  </header>
+
+  <div id="errors" class="errors" role="alert" aria-live="assertive"></div>
+
+  <div class="layout">
+    <!-- ───────────── Controls (shared by Explore and Compare) ───────────── -->
+    <aside class="controls" aria-label="Generation controls">
+      <form id="controls" autocomplete="off" novalidate>
+        <div class="field">
+          <label for="prompt">Prompt</label>
+          <textarea id="prompt" rows="4" spellcheck="false">Holmes looked at me and said</textarea>
+        </div>
+
+        <div class="field" id="model-field">
+          <label for="model">Model <span class="hint">(Explore tab)</span></label>
+          <select id="model"></select>
+          <p class="model-blurb" id="model-blurb"></p>
+        </div>
+
+        <fieldset class="presets">
+          <legend>Presets</legend>
+          <div class="preset-row">
+            <button type="button" class="preset" data-preset="greedy" title="Temperature 0: always take the most likely token">Greedy</button>
+            <button type="button" class="preset" data-preset="balanced" title="Temperature 0.8, top-p 0.95">Balanced</button>
+            <button type="button" class="preset" data-preset="creative" title="Temperature 1.2, min-p 0.05">Creative</button>
+            <button type="button" class="preset" data-preset="chaos" title="Temperature 2, every filter off">Chaos</button>
+          </div>
+        </fieldset>
+
+        <fieldset class="knobs">
+          <legend>Sampling</legend>
+          <div class="knob" data-knob="temperature">
+            <label for="temperature-range">Temperature <span class="knob-note" data-off="greedy">0 = greedy</span></label>
+            <div class="knob-inputs">
+              <input type="range" id="temperature-range" min="0" max="2" step="0.05" value="0.8">
+              <input type="number" id="temperature" min="0" max="2" step="0.05" value="0.8" aria-label="Temperature value">
+            </div>
+          </div>
+          <div class="knob" data-knob="top_k">
+            <label for="top_k-range">Top-k <span class="knob-note" data-off="off">0 = off</span></label>
+            <div class="knob-inputs">
+              <input type="range" id="top_k-range" min="0" max="100" step="1" value="0">
+              <input type="number" id="top_k" min="0" max="100" step="1" value="0" aria-label="Top-k value">
+            </div>
+          </div>
+          <div class="knob" data-knob="top_p">
+            <label for="top_p-range">Top-p <span class="knob-note" data-off="off">1 = off</span></label>
+            <div class="knob-inputs">
+              <input type="range" id="top_p-range" min="0.05" max="1" step="0.01" value="0.95">
+              <input type="number" id="top_p" min="0.05" max="1" step="0.01" value="0.95" aria-label="Top-p value">
+            </div>
+          </div>
+          <div class="knob" data-knob="min_p">
+            <label for="min_p-range">Min-p <span class="knob-note" data-off="off">0 = off</span></label>
+            <div class="knob-inputs">
+              <input type="range" id="min_p-range" min="0" max="0.5" step="0.01" value="0">
+              <input type="number" id="min_p" min="0" max="0.5" step="0.01" value="0" aria-label="Min-p value">
+            </div>
+          </div>
+          <div class="knob" data-knob="repetition_penalty">
+            <label for="repetition_penalty-range">Repetition penalty <span class="knob-note" data-off="off">1 = off</span></label>
+            <div class="knob-inputs">
+              <input type="range" id="repetition_penalty-range" min="1" max="2" step="0.05" value="1">
+              <input type="number" id="repetition_penalty" min="1" max="2" step="0.05" value="1" aria-label="Repetition penalty value">
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="knobs">
+          <legend>Generation</legend>
+          <div class="knob" data-knob="max_new_tokens">
+            <label for="max_new_tokens-range">Max new tokens</label>
+            <div class="knob-inputs">
+              <input type="range" id="max_new_tokens-range" min="1" max="200" step="1" value="60">
+              <input type="number" id="max_new_tokens" min="1" max="200" step="1" value="60" aria-label="Max new tokens value">
+            </div>
+          </div>
+          <div class="knob" data-knob="top_n">
+            <label for="top_n-range">Candidates shown (top-n)</label>
+            <div class="knob-inputs">
+              <input type="range" id="top_n-range" min="5" max="30" step="1" value="10">
+              <input type="number" id="top_n" min="5" max="30" step="1" value="10" aria-label="Top-n value">
+            </div>
+          </div>
+          <div class="knob seed-knob">
+            <label for="seed">Seed</label>
+            <div class="knob-inputs">
+              <input type="number" id="seed" min="0" max="2147483647" step="1" value="42" disabled>
+              <label class="check"><input type="checkbox" id="seed-random" checked> random</label>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit" id="generate" class="primary">Generate</button>
+          <button type="button" id="stop" class="secondary" disabled>Stop</button>
+        </div>
+        <p class="kbd-hint">Ctrl/⌘ + Enter in the prompt also generates.</p>
+      </form>
+
+      <details class="explainer" id="explainer">
+        <summary>How decoding works</summary>
+        <ol class="pipeline">
+          <li><b>Logits.</b> The model scores every one of ~49k tokens. Softmax turns those scores into the <span class="k raw">raw</span> probabilities: what the model actually believes.</li>
+          <li><b>Repetition penalty.</b> Tokens already in the context get their logit divided (if positive) or multiplied (if negative) by the penalty, so repeats become less likely.</li>
+          <li><b>Temperature.</b> Logits are divided by <i>T</i>. <i>T</i>&lt;1 sharpens the distribution toward the favourite, <i>T</i>&gt;1 flattens it, <i>T</i>=0 means greedy: always take the top token. The result is the <span class="k scaled">scaled</span> distribution.</li>
+          <li><b>Top-k.</b> Keep only the <i>k</i> highest-scoring tokens.</li>
+          <li><b>Top-p (nucleus).</b> Keep the smallest set of top tokens whose probability adds up to <i>p</i>.</li>
+          <li><b>Min-p.</b> Keep tokens at least <i>min-p</i> × as likely as the favourite. This adapts: strict when the model is confident, loose when it is not.</li>
+          <li><b>Renormalise.</b> Survivors' probabilities are rescaled to sum to 1. This is the <span class="k final">final</span> distribution.</li>
+          <li><b>Sample.</b> Draw one token from it, append it to the text, and repeat.</li>
+        </ol>
+        <p class="explainer-note">Click any generated token to see these three distributions side by side, then move a slider and watch them change.</p>
+      </details>
+    </aside>
+
+    <main id="main" class="main">
+      <!-- ───────────── Explore ───────────── -->
+      <section id="panel-explore" role="tabpanel" aria-labelledby="tab-explore" class="panel">
+        <div class="explore-grid">
+          <div class="output-col">
+            <div class="output-head">
+              <nav class="breadcrumbs" id="breadcrumbs" aria-label="Branch history"></nav>
+              <div class="color-mode" role="radiogroup" aria-label="Colour tokens by">
+                <span class="cm-label">Colour by</span>
+                <label><input type="radio" name="colorby" value="prob" checked> probability</label>
+                <label><input type="radio" name="colorby" value="entropy"> entropy</label>
+              </div>
+            </div>
+            <div class="legend" id="legend" aria-hidden="true"></div>
+            <div class="tokens" id="tokens" aria-label="Generated tokens" aria-live="off">
+              <p class="empty">Press <b>Generate</b>. Each token appears as a chip; click one to look inside.</p>
+            </div>
+            <div class="run-stats" id="run-stats" aria-live="polite"></div>
+          </div>
+          <div class="inspector" id="inspector" aria-label="Token inspector"></div>
+        </div>
+      </section>
+
+      <!-- ───────────── Compare ───────────── -->
+      <section id="panel-compare" role="tabpanel" aria-labelledby="tab-compare" class="panel" hidden>
+        <div class="compare-head">
+          <p>Same prompt, same sampling settings, every model at once. Pretraining vs. finetuning vs. from-scratch, side by side.</p>
+          <div class="compare-actions">
+            <fieldset class="compare-models" id="compare-models">
+              <legend class="sr-only">Models to compare</legend>
+            </fieldset>
+            <button type="button" id="compare-run" class="primary">Generate on all</button>
+            <button type="button" id="compare-stop" class="secondary" disabled>Stop</button>
+          </div>
+        </div>
+        <div class="compare-cols" id="compare-cols"></div>
+        <div class="inspector compare-inspector" id="compare-inspector" aria-label="Compare token inspector"></div>
+      </section>
+
+      <!-- ───────────── Models ───────────── -->
+      <section id="panel-models" role="tabpanel" aria-labelledby="tab-models" class="panel" hidden>
+        <p class="models-intro">
+          All models share one tokenizer (SmolLM2 byte-level BPE), so their token-level predictions line up.
+          Validation loss is cross-entropy in nats per token on held-out Holmes text; perplexity = e<sup>loss</sup>
+          (“as unsure as choosing uniformly among this many tokens”). Lower is better.
+        </p>
+        <div class="model-cards" id="model-cards"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

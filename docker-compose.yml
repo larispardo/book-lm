@@ -1,0 +1,28 @@
+services:
+  api:
+    build: .
+    image: booklm:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./artifacts/models:/app/artifacts/models:ro
+    environment:
+      BOOKLM_LOG_LEVEL: info
+      BOOKLM_MAX_NEW_TOKENS: "200"
+      # BOOKLM_MODELS: holmes-lora,smollm2-base   # load a subset
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+    restart: unless-stopped
+
+  # Optional: `docker compose --profile obs up` adds Prometheus on :9090 scraping /metrics.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["obs"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - api
