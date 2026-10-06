@@ -33,6 +33,9 @@ the lab UI, so every concept can be seen and poked at, not just run.
 - Vocab size sweep (1k–32k): compression vs embedding cost vs model loss.
 - Show partial-UTF-8 vocab entries with `errors="backslashreplace"` in `vocab.txt`.
 - Unigram LM tokenizer (SentencePiece) vs BPE on the same split.
+- Data platform stage: track runs and register checkpoints in MLflow (or similar) instead of
+  local folders + a GitHub release; the lab would read models from the registry.
+- Early stopping (`--patience`) and refusing to overwrite an existing run without `--name`.
 
 ## Decisions so far
 
@@ -44,5 +47,8 @@ the lab UI, so every concept can be seen and poked at, not just run.
 - Pretraining: hand-written GPT (pre-norm blocks, learned positions, tied embeddings), AdamW,
   warmup + cosine LR, best checkpoint by val loss, MPS with caffeinate. Presets: tiny 1.5M,
   small 5.3M, base 13.9M params.
+- First runs (3,000 steps, batch 32 × 256 tokens ≈ 29 epochs): best val loss tiny 5.13
+  (300 steps), small 4.16, base 4.17 at step 1,200, then overfits (4.51 at the end).
+  With ~0.84M tokens, more parameters stop helping: data is the bottleneck.
 - Hand-written core pieces so far: `merge_tree` (stage 1); `causal_attention`, `train_step`
   (stage 2).
