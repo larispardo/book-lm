@@ -48,7 +48,6 @@ def test_variant_stats(bpe):
 
 
 # Exercise: implement lab.merge_tree, then delete this marker.
-@pytest.mark.xfail(raises=NotImplementedError, strict=True, reason="exercise: merge_tree")
 def test_merge_tree(bpe):
     the = bpe.encode(" the")[0]
     tree = lab.merge_tree(bpe, the)

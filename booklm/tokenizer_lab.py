@@ -226,6 +226,15 @@ def smollm2_pieces(text: str) -> list[dict]:
 # ── exercise ─────────────────────────────────────────────────────────────────────────────
 
 
+def add_token_tree(bpe: ByteBPE, token_id: int) -> dict:
+
+    node = {"id": token_id, "token": bpe.decode([token_id]), "children": []}
+    if token_id >= 256:
+        left, right = bpe.merges[token_id - 256]
+        node["children"] = [add_token_tree(bpe, left), add_token_tree(bpe, right)]
+    return node
+
+
 def merge_tree(bpe: ByteBPE, token_id: int) -> dict:
     """How a token was built, as a nested tree. YOUR EXERCISE.
 
@@ -240,4 +249,5 @@ def merge_tree(bpe: ByteBPE, token_id: int) -> dict:
     Hints: ids below 256 are raw bytes (leaves). For a merged id, `bpe.merges[id - 256]`
     gives the two ids it was glued from. Recursion does the rest.
     """
-    raise NotImplementedError
+    tree = add_token_tree(bpe, token_id)
+    return tree
