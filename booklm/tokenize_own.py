@@ -28,6 +28,7 @@ import time
 import unicodedata
 from array import array
 from collections import Counter, defaultdict
+from collections.abc import Iterator
 from pathlib import Path
 
 from booklm.download import BOOKS
@@ -96,7 +97,20 @@ def merge(ids: list[int], pair: tuple[int, int], new_id: int) -> list[int]:
 
 
 def train_bpe(text: str, num_merges: int) -> list[tuple[int, int]]:
-    """Learn merges: repeatedly fuse the most frequent adjacent pair of tokens.
+    """Learn merges: repeatedly fuse the most frequent adjacent pair of tokens."""
+    merges = []
+    for pair, _count, _pair_counts in iter_merges(text):
+        if len(merges) == num_merges:
+            break
+        merges.append(pair)
+    return merges
+
+
+def iter_merges(text: str) -> Iterator[tuple[tuple[int, int], int, Counter]]:
+    """Run BPE one merge at a time, yielding (chosen pair, its count, all pair counts).
+
+    Each yield happens *before* the chosen pair is merged, so `pair_counts` shows every
+    candidate the greedy step chose from. It is a live view: read it before advancing.
 
     Start: every chunk is a list of bytes (ids 0-255). Each merge creates id 256, 257, ...
     Speed trick: work on *unique* chunks weighted by frequency (~30k instead of ~1M), and
@@ -116,15 +130,14 @@ def train_bpe(text: str, num_merges: int) -> list[tuple[int, int]]:
     heap = [(-count, pair) for pair, count in pair_counts.items()]
     heapq.heapify(heap)
 
-    merges: list[tuple[int, int]] = []
-    while len(merges) < num_merges and heap:
+    new_id = 256
+    while heap:
         neg_count, pair = heapq.heappop(heap)
         if pair_counts.get(pair, 0) != -neg_count:
             continue  # stale entry: this pair's count changed since it was pushed
         if -neg_count < 2:
-            break  # nothing left that occurs more than once
-        new_id = 256 + len(merges)
-        merges.append(pair)
+            return  # nothing left that occurs more than once
+        yield pair, -neg_count, pair_counts
         changed = set()
         for wi in where.pop(pair):
             word, freq = words[wi], freqs[wi]
@@ -141,7 +154,7 @@ def train_bpe(text: str, num_merges: int) -> list[tuple[int, int]]:
                 heapq.heappush(heap, (-pair_counts[p], p))
             else:
                 del pair_counts[p]
-    return merges
+        new_id += 1
 
 
 class ByteBPE:
