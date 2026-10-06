@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import heapq
 import json
+from collections import Counter
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-from booklm.tokenize_own import ByteBPE, iter_merges, merge
+from booklm.tokenize_own import _CHUNK, ByteBPE, iter_merges, merge
 
 ARTIFACTS = Path("artifacts")
 # Reference model width used to translate vocab size into embedding parameters.
@@ -17,6 +19,11 @@ SMOLLM2_ID = "HuggingFaceTB/SmolLM2-135M"
 
 # Sample texts chosen to stress tokenizers differently.
 SAMPLES = {
+    "Mixed paragraph": (
+        "Holmes glanced at the commissionnaire's telegram from Northumberland. "
+        '"Elementary," said he, "the Baskerville heir never owned a smartphone, and '
+        'Inspector Lestrade misread the cipher entirely."'
+    ),
     "Classic quote": 'Holmes looked at me and said, "Elementary, my dear Watson."',
     "Rare Victorian words": (
         "The commissionnaire handed me a telegram from Northumberland, marked most "
@@ -45,6 +52,39 @@ def random_paragraph(text: str, min_chars: int = 120, max_chars: int = 500) -> s
 
     paragraphs = [p for p in text.split("\n\n") if min_chars <= len(p) <= max_chars]
     return random.choice(paragraphs)
+
+
+FREQUENCY_BANDS = (3000, 500, 100, 30, 10, 4, 2, 1)
+
+
+def word_counts(text: str) -> Counter:
+    """How often each pre-tokenized chunk (word with its leading space, etc.) occurs."""
+    return Counter(_CHUNK.findall(text))
+
+
+def words_by_frequency(
+    counts: Counter, bands: tuple[int, ...] = FREQUENCY_BANDS, per_band: int = 2, min_len: int = 6
+) -> list[tuple[str, int]]:
+    """Pick words (with their leading space) whose count is closest to each frequency band.
+
+    Long words are preferred because short ones become single tokens almost immediately.
+    """
+    counts = {w: n for w, n in counts.items() if w.startswith(" ") and w[1:].isalpha()}
+    pool = [(w, n) for w, n in counts.items() if len(w) - 1 >= min_len]
+    picked, used = [], set()
+    for band in bands:
+        closest = sorted(
+            (item for item in pool if item[0] not in used),
+            # Ties: avoid ALL-CAPS headings, then a stable pseudo-random order (not A-Z).
+            key=lambda item: (
+                abs(item[1] - band) / band,
+                item[0].isupper(),
+                hashlib.md5(item[0].encode()).hexdigest(),
+            ),
+        )[:per_band]
+        picked += closest
+        used.update(w for w, _ in closest)
+    return picked
 
 
 def load_meta(name: str, artifacts: Path = ARTIFACTS) -> dict:

@@ -69,3 +69,9 @@ def test_smaller_vocab_is_a_prefix_of_a_bigger_one():
 def test_random_paragraph_respects_length_bounds():
     text = "\n\n".join(["short", "x" * 200, "y" * 900])
     assert lab.random_paragraph(text) == "x" * 200
+
+
+def test_words_by_frequency_spans_the_bands():
+    counts = lab.word_counts(" common" * 50 + " middling" * 10 + " rarity")
+    picked = lab.words_by_frequency(counts, bands=(50, 10, 1), per_band=1, min_len=6)
+    assert picked == [(" common", 50), (" middling", 10), (" rarity", 1)]

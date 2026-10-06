@@ -6,10 +6,12 @@ from app_pages._cache import (
     DEFAULT_VOCAB,
     SPECIALS,
     candidates,
+    frequency_words,
     full_run,
     max_vocab,
     stats,
     tokenizer,
+    word_counts,
 )
 from booklm import tokenizer_lab as lab
 
@@ -246,6 +248,35 @@ elif view and "Vocabulary size" in view:
             ),
         },
         alt="Compression and cost for each vocabulary size",
+    )
+
+    st.subheader("Words across frequency bands", divider="gray")
+    st.caption(
+        "Words picked from the training text at every frequency level, from thousands of "
+        "occurrences down to one. Read across a row to see the size at which a word becomes "
+        "a single token; rare and unseen words stay in pieces."
+    )
+    extra = st.text_input(
+        "Add your own words (comma separated)",
+        value="smartphone, Kubernetes, ciudad",
+        key="own_extra_words",
+    )
+    counts = word_counts()
+    own = [" " + w.strip() for w in extra.split(",") if w.strip()]
+    words = list(frequency_words()) + [(w, counts.get(w, 0)) for w in own]
+    word_rows = []
+    for word, count in words:
+        row = {"word": word.strip(), "times in train": count}
+        for size in sizes:
+            parts = [t for _, t in lab.pieces(tokenizer(size), word)]
+            row[size_label(size)] = " | ".join(lab.visible(t) for t in parts)
+        word_rows.append(row)
+    st.dataframe(
+        pd.DataFrame(word_rows),
+        hide_index=True,
+        height=36 * (len(word_rows) + 1) + 3,
+        column_config={"times in train": st.column_config.NumberColumn(format="%d")},
+        alt="How words at each frequency level split under each vocabulary size",
     )
 
     st.subheader("The sample at each size", divider="gray")

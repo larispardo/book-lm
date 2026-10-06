@@ -50,3 +50,13 @@ def candidates(step: int) -> list[tuple[tuple[int, int], int]]:
 @st.cache_resource(show_spinner="Loading SmolLM2 tokenizer…")
 def smollm2():
     return lab.smollm2()
+
+
+@st.cache_data(show_spinner=False)
+def word_counts() -> dict[str, int]:
+    return dict(lab.word_counts(split("train")))
+
+
+@st.cache_data(show_spinner=False)
+def frequency_words() -> list[tuple[str, int]]:
+    return lab.words_by_frequency(word_counts())
