@@ -145,6 +145,19 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     log = open(out / "log.jsonl", "w")
     tokens_per_step = args.batch_size * cfg.context
+    header = {
+        "run": out.name,
+        "preset": args.preset,
+        "config": cfg.to_dict(),
+        "params": model.num_params(),
+        "batch_size": args.batch_size,
+        "tokens_per_step": tokens_per_step,
+        "train_tokens": len(train),
+        "steps": args.steps,
+        "lr": args.lr,
+        "device": str(device),
+    }
+    log.write(json.dumps({"header": header}) + "\n")
     print(
         f"{out.name}: {model.num_params() / 1e6:.2f}M params on {device}, "
         f"{len(train):,} train tokens, {tokens_per_step:,} tokens/step, "
