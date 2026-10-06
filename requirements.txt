@@ -1,0 +1,7 @@
+# For Streamlit Community Cloud. Local development uses pyproject.toml (pip install -e ".[lab,train]").
+# The CPU index keeps torch at ~200 MB instead of the ~2.5 GB CUDA build.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.4
+numpy>=1.26
+tokenizers>=0.20
+streamlit>=1.57

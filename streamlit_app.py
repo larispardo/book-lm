@@ -1,10 +1,19 @@
 import streamlit as st
 
 from app_pages._cache import split
+from booklm import lab_assets
 from booklm import tokenizer_lab as lab
 from booklm.tokenizer_lab import ARTIFACTS
 
 st.set_page_config(page_title="book-lm lab", page_icon=":material/menu_book:", layout="wide")
+
+
+@st.cache_resource(show_spinner="First start: downloading the lab data (~80 MB)…")
+def fetch_assets() -> bool:
+    return lab_assets.ensure()
+
+
+fetch_assets()
 
 home = st.Page(
     "app_pages/home.py", title="Start here", icon=":material/rocket_launch:", default=True
