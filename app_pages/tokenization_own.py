@@ -188,33 +188,52 @@ elif view and "Vocabulary size" in view:
         )
     table = pd.DataFrame(rows)
 
-    metric = st.segmented_control(
-        "Plot",
-        ["Bytes per token", "Val gap %", "Tokens in sample", "Embedding params"],
-        default="Bytes per token",
-        key="own_metric",
-    )
+    chart_col, side_col = st.columns([3, 1], gap="large")
+    with side_col:
+        metric = st.radio(
+            "Plot",
+            ["Bytes per token", "Val gap %", "Tokens in sample", "Embedding params"],
+            key="own_metric",
+        )
+        st.caption(
+            {
+                "Bytes per token": "Higher = each token carries more text. Watch val fall "
+                "behind train as the vocabulary grows.",
+                "Val gap %": "How much worse held-out text compresses. Growth means late "
+                "merges memorise training-only words.",
+                "Tokens in sample": "Sequence length the model would see for the sample text "
+                "in the sidebar.",
+                "Embedding params": f"vocab × {lab.D_MODEL}: the first layer of the model, "
+                "paid for every token in the vocabulary.",
+            }[metric]
+        )
     columns = {
         "Bytes per token": ["train bytes/token", "val bytes/token"],
         "Val gap %": ["val gap %"],
         "Tokens in sample": ["tokens in sample"],
         "Embedding params": ["embedding params"],
-    }[metric or "Bytes per token"]
+    }[metric]
     long = table.melt(
         id_vars=["vocab", "vocab size"], value_vars=columns, var_name="series", value_name="value"
     )
-    st.altair_chart(
-        alt.Chart(long)
-        .mark_line(point=True)
-        .encode(
-            x=alt.X("vocab size", scale=alt.Scale(type="log", base=2), title="vocabulary size"),
-            y=alt.Y("value", scale=alt.Scale(zero=False), title=metric),
-            color=alt.Color("series", legend=alt.Legend(orient="bottom", title=None)),
-            tooltip=["vocab", "series", alt.Tooltip("value", format=",.2f")],
+    with chart_col:
+        st.altair_chart(
+            alt.Chart(long)
+            .mark_line(point=alt.OverlayMarkDef(size=60))
+            .encode(
+                x=alt.X(
+                    "vocab size",
+                    scale=alt.Scale(type="log", base=2),
+                    axis=alt.Axis(values=list(table["vocab size"]), format="~s"),
+                    title="vocabulary size (log scale)",
+                ),
+                y=alt.Y("value", scale=alt.Scale(zero=False, nice=True), title=metric),
+                color=alt.Color("series", legend=alt.Legend(orient="top", title=None)),
+                tooltip=["vocab", "series", alt.Tooltip("value", format=",.2f")],
+            )
+            .properties(height=420),
+            alt=f"{metric} for each selected vocabulary size",
         )
-        .properties(height=280),
-        alt=f"{metric} for each selected vocabulary size",
-    )
     st.dataframe(
         table.drop(columns="vocab size"),
         hide_index=True,
