@@ -35,7 +35,6 @@ def test_generation_is_reproducible_with_a_seed(model, codec):
 
 
 # Exercise: implement metrics.bits_per_byte, then delete this marker.
-@pytest.mark.xfail(raises=NotImplementedError, strict=True, reason="exercise: bits_per_byte")
 def test_bits_per_byte():
     assert bits_per_byte(math.log(256), tokens=100, n_bytes=100) == pytest.approx(8.0)
     assert bits_per_byte(math.log(2), tokens=1, n_bytes=1) == pytest.approx(1.0)

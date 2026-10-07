@@ -1,6 +1,7 @@
 """Metrics that stay comparable across tokenizers."""
 
 from __future__ import annotations
+import math
 
 # ── YOUR EXERCISE ───────────────────────────────────────────────────────────────────────
 
@@ -17,4 +18,5 @@ def bits_per_byte(loss_nats_per_token: float, tokens: int, n_bytes: int) -> floa
     Sanity checks: a model guessing uniformly among 256 bytes, with one token per byte, has
     loss ln(256) nats/token and should score exactly 8 bits per byte.
     """
-    raise NotImplementedError
+    loss = loss_nats_per_token*tokens / n_bytes
+    return loss / math.log(2)
