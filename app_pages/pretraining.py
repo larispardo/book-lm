@@ -2,7 +2,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from app_pages._cache import DEFAULT_VOCAB, gpt_model, run_log, tokenizer
+from app_pages._cache import codec, gpt_model, run_log, sample
 from booklm import pretrain_lab as lab
 from booklm.tokenizer_lab import visible
 
@@ -46,6 +46,7 @@ view = st.segmented_control(
         ":material/show_chart: Loss curves",
         ":material/history_edu: Samples over training",
         ":material/grid_on: Attention maps",
+        ":material/swords: Tokenizer showdown",
     ],
     default=":material/show_chart: Loss curves",
     key="pt_view",
@@ -113,9 +114,9 @@ elif view and "Samples" in view:
 elif view and "Attention" in view:
     name = st.selectbox("Run", chosen, key="pt_attn_run")
     model, ckpt_step = gpt_model(name)
-    bpe = tokenizer(DEFAULT_VOCAB)
-    ids = bpe.encode(st.session_state.sentence)[:32]
-    tokens = [f"{i:02d} {visible(bpe.decode([t]))}" for i, t in enumerate(ids)]
+    run_codec = codec(loaded[name].tokenizer)
+    ids = run_codec.encode(st.session_state.sentence)[:32]
+    tokens = [f"{i:02d} {visible(run_codec.decode([t]))}" for i, t in enumerate(ids)]
     maps = lab.attention_maps(model, ids)  # (layers, heads, T, T)
     n_layers, n_heads = maps.shape[:2]
 
@@ -167,3 +168,53 @@ elif view and "Attention" in view:
     else:
         chart = heat.properties(height=560)
     st.altair_chart(chart, alt=f"Attention weights of layer {layer}")
+
+# ── tokenizer showdown ───────────────────────────────────────────────────────────────────
+elif view and "showdown" in view:
+    st.caption(
+        "Same architecture, same text, same training steps: only the tokenizer differs. "
+        "Every model writes the same number of characters from the same prompt with the same "
+        "seeds, so the text is directly comparable. Per-token loss is not (each tokenizer cuts "
+        "the text into a different number of pieces); bits per byte is."
+    )
+    PROMPTS = ["Holmes", "Watson", "It was a dark and stormy night, and", "The door opened, and"]
+    c1, c2, c3 = st.columns([2, 1, 1])
+    prompt = c1.selectbox("Prompt", PROMPTS, key="sd_prompt", accept_new_options=True)
+    temperature = c2.slider("Temperature", 0.1, 1.5, 0.8, 0.1, key="sd_temp")
+    n_samples = c3.number_input("Samples each", 1, 5, 3, key="sd_n")
+
+    def vocab_of(run: lab.Run) -> int:
+        return run.header["config"]["vocab_size"]
+
+    contenders = sorted(loaded.values(), key=vocab_of)[:4]
+    if len(loaded) > 4:
+        st.caption("Showing the first 4 selected runs by vocabulary size.")
+    for col, run in zip(st.columns(len(contenders)), contenders, strict=True):
+        with col:
+            cfg = run.header["config"]
+            emb = cfg["vocab_size"] * cfg["d_model"]
+            st.subheader(run.name.removeprefix("holmes-gpt-"), divider="gray")
+            st.caption(
+                f"{run.tokenizer} · vocab {cfg['vocab_size']:,} · "
+                f"{run.header['params'] / 1e6:.1f}M params "
+                f"({100 * emb / run.header['params']:.0f}% embeddings)"
+            )
+            try:
+                bpb = run.best_bits_per_byte()
+                st.metric(
+                    "Bits per byte",
+                    "—" if bpb is None else f"{bpb:.3f}",
+                    help="Best val loss converted to bits per byte of text. Lower is better.",
+                    border=True,
+                )
+            except NotImplementedError:
+                st.metric(
+                    "Bits per byte",
+                    "exercise",
+                    help="Implement booklm.metrics.bits_per_byte to see this number.",
+                    border=True,
+                )
+            for seed in range(int(n_samples)):
+                with st.container(border=True):
+                    st.markdown(f"**{prompt}**")
+                    st.text(sample(run.name, prompt, temperature, seed, 200))

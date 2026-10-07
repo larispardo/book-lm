@@ -25,7 +25,7 @@ MARKER = Path("artifacts/data/clean/train.txt")
 PATTERNS = [
     "artifacts/data/clean/*.txt",
     "artifacts/data/tokens/*/*",
-    "artifacts/tokenizers/holmes-bpe-8192/*",
+    "artifacts/tokenizers/holmes-bpe-*/*",
     "artifacts/models/holmes-gpt-*/model.pt",
     "artifacts/models/holmes-gpt-*/log.jsonl",
 ]

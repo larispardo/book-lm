@@ -10,10 +10,12 @@ from pathlib import Path
 import pandas as pd
 import torch
 
+from booklm.metrics import bits_per_byte
 from booklm.model import GPT, GPTConfig
+from booklm.text_codec import DEFAULT
 
 MODELS = Path("artifacts/models")
-TOKENS = Path("artifacts/data/tokens/holmes-bpe-8192")
+TOKENS = Path("artifacts/data/tokens")
 
 
 @dataclass
@@ -29,6 +31,21 @@ class Run:
 
     def epochs(self, steps: pd.Series) -> pd.Series:
         return steps * self.header["tokens_per_step"] / self.header["train_tokens"]
+
+    @property
+    def tokenizer(self) -> str:
+        return self.header.get("tokenizer", DEFAULT)
+
+    def best_bits_per_byte(self, tokens_dir: Path = TOKENS) -> float | None:
+        """Best val loss in bits per byte: comparable across tokenizers.
+
+        Raises NotImplementedError until the metrics.bits_per_byte exercise is done.
+        """
+        if self.best is None:
+            return None
+        val = json.loads((tokens_dir / self.tokenizer / "meta.json").read_text())["val"]
+        n_bytes = round(val["tokens"] * val["bytes_per_token"])
+        return bits_per_byte(float(self.best.val_loss), val["tokens"], n_bytes)
 
 
 def list_runs(models_dir: Path = MODELS) -> list[str]:
@@ -57,10 +74,12 @@ def load_run(run_dir: Path) -> Run:
 
 def _header_from_checkpoint(run_dir: Path, batch_size: int = 32) -> dict:
     """Runs logged before headers existed: rebuild what we can (default batch size)."""
-    cfg = torch.load(run_dir / "model.pt", map_location="cpu", weights_only=True)["config"]
-    train_tokens = (TOKENS / "train.bin").stat().st_size // 2  # uint16 = 2 bytes per token
+    ckpt = torch.load(run_dir / "model.pt", map_location="cpu", weights_only=True)
+    cfg, tokenizer = ckpt["config"], ckpt.get("tokenizer", DEFAULT)
+    train_tokens = (TOKENS / tokenizer / "train.bin").stat().st_size // 2  # uint16: 2 bytes
     return {
         "run": run_dir.name,
+        "tokenizer": tokenizer,
         "preset": run_dir.name.removeprefix("holmes-gpt-"),
         "config": cfg,
         "params": GPT(GPTConfig(**cfg)).num_params(),

@@ -93,3 +93,20 @@ def _gpt_model(name: str, mtime: float):
     from booklm import pretrain_lab
 
     return pretrain_lab.load_model(_run_dir(name))
+
+
+@st.cache_resource(show_spinner="Loading tokenizer…", max_entries=8)
+def codec(name: str):
+    from booklm.text_codec import load_codec
+
+    return load_codec(name)
+
+
+@st.cache_data(show_spinner=False, max_entries=256)
+def sample(run: str, prompt: str, temperature: float, seed: int, chars: int) -> str:
+    from booklm.generation import generate_chars
+
+    model, _ = gpt_model(run)
+    return generate_chars(
+        model, codec(run_log(run).tokenizer), prompt, chars, temperature=temperature, seed=seed
+    )

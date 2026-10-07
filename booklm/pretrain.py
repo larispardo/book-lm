@@ -2,6 +2,7 @@
 
     python -m booklm.pretrain --preset tiny --steps 300      # smoke test, ~1 min
     python -m booklm.pretrain --preset small                 # the real run
+    python -m booklm.pretrain --preset small --tokenizer smollm2   # same model, other tokenizer
 
 Keeps the Mac awake on its own (caffeinate) while training. Writes, per run:
   artifacts/models/<name>/model.pt     best checkpoint by validation loss (+ config)
@@ -17,16 +18,17 @@ import os
 import shutil
 import subprocess
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 
 from booklm.batches import get_batch, load_tokens
+from booklm.generation import generate_chars
 from booklm.model import GPT, PRESETS
-from booklm.tokenize_own import ByteBPE
+from booklm.text_codec import DEFAULT, load_codec
 
-TOKENIZER = "holmes-bpe-8192"
 SAMPLE_PROMPT = "Holmes"
 
 
@@ -110,7 +112,12 @@ def keep_awake() -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description="Pretrain the GPT on Holmes tokens.")
     p.add_argument("--preset", choices=PRESETS, default="small")
-    p.add_argument("--name", help="run name (default: holmes-gpt-<preset>)")
+    p.add_argument(
+        "--tokenizer",
+        default=DEFAULT,
+        help="holmes-bpe-<size> (ours, see tokenize_own --vocab-size) or smollm2",
+    )
+    p.add_argument("--name", help="run name (default: holmes-gpt-<preset>[-<tokenizer>])")
     p.add_argument("--steps", type=int, default=3000)
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--lr", type=float, default=1e-3)
@@ -125,11 +132,12 @@ def main() -> None:
     keep_awake()
     torch.manual_seed(args.seed)
     device = pick_device(args.device)
-    cfg = PRESETS[args.preset]
-    tokens = args.artifacts / "data" / "tokens" / TOKENIZER
+    codec = load_codec(args.tokenizer, args.artifacts)
+    # Same architecture for every tokenizer; only the embedding table follows the vocabulary.
+    cfg = replace(PRESETS[args.preset], vocab_size=codec.vocab_size)
+    tokens = args.artifacts / "data" / "tokens" / args.tokenizer
     train, val = load_tokens(tokens / "train.bin"), load_tokens(tokens / "val.bin")
-    tokenizer = ByteBPE.load(args.artifacts / "tokenizers" / TOKENIZER)
-    assert tokenizer.vocab_size == cfg.vocab_size
+    meta = json.loads((tokens / "meta.json").read_text())
 
     model = GPT(cfg).to(device)
     # Weight decay on matrices only; biases and LayerNorm gains are left alone.
@@ -141,13 +149,16 @@ def main() -> None:
         betas=(0.9, 0.95),
     )
 
-    out = args.artifacts / "models" / (args.name or f"holmes-gpt-{args.preset}")
+    suffix = "" if args.tokenizer == DEFAULT else "-" + args.tokenizer.replace("holmes-", "")
+    out = args.artifacts / "models" / (args.name or f"holmes-gpt-{args.preset}{suffix}")
     out.mkdir(parents=True, exist_ok=True)
     log = open(out / "log.jsonl", "w")
     tokens_per_step = args.batch_size * cfg.context
     header = {
         "run": out.name,
         "preset": args.preset,
+        "tokenizer": args.tokenizer,
+        "val_bytes_per_token": meta["val"]["bytes_per_token"],
         "config": cfg.to_dict(),
         "params": model.num_params(),
         "batch_size": args.batch_size,
@@ -165,7 +176,6 @@ def main() -> None:
     )
 
     gen = torch.Generator().manual_seed(args.seed)
-    prompt = torch.tensor([tokenizer.encode(SAMPLE_PROMPT)], device=device)
     best, start = float("inf"), time.time()
     for step in range(args.steps + 1):
         lr = lr_at(step, args.lr, args.warmup, args.steps)
@@ -174,13 +184,19 @@ def main() -> None:
 
         if step % args.eval_every == 0 or step == args.steps:
             val_loss = evaluate(model, val, args.batch_size, 20, device)
-            sample_ids = model.generate(prompt, 40, temperature=0.8, top_k=50, generator=gen)
-            sample = tokenizer.decode(sample_ids[0].tolist())
+            model.eval()
+            sample = SAMPLE_PROMPT + generate_chars(model, codec, SAMPLE_PROMPT, 160, seed=step)
+            model.train()
             record = {"step": step, "val_loss": val_loss, "sample": sample}
             if val_loss < best:
                 best = val_loss
                 torch.save(
-                    {"config": cfg.to_dict(), "model": model.state_dict(), "step": step},
+                    {
+                        "config": cfg.to_dict(),
+                        "tokenizer": args.tokenizer,
+                        "model": model.state_dict(),
+                        "step": step,
+                    },
                     out / "model.pt",
                 )
                 record["best"] = True
